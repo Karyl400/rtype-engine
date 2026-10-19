@@ -1,58 +1,59 @@
 #include "engine/ecs/world.hpp"
 
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 
 namespace engine::ecs {
 
-namespace detail {
-
-entt::entity toNative(Entity entity) {
-    return static_cast<entt::entity>(entity.value);
-}
-
-Entity fromNative(entt::entity native) {
-    return Entity{static_cast<std::uint32_t>(native)};
-}
-
-}
+World::ComponentStorageBase::~ComponentStorageBase() = default;
 
 World::World() = default;
 
 World::~World() = default;
 
 Entity World::create() {
-    return detail::fromNative(registry_.create());
+    if (nextEntityId_ > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::overflow_error("identifiants d'entite epuises");
+    }
+    const auto id = static_cast<std::uint32_t>(nextEntityId_++);
+    aliveEntities_.insert(id);
+    return Entity{id};
 }
 
 foundation::Status World::destroy(Entity entity) {
-    const auto native = detail::toNative(entity);
-    if (!registry_.valid(native)) {
+    if (!alive(entity)) {
         return foundation::failStatus(foundation::ErrorCode::NotFound, "entite inconnue");
     }
-    registry_.destroy(native);
+    for (auto& [type, store] : componentStores_) {
+        static_cast<void>(type);
+        store->erase(entity.value);
+    }
+    aliveEntities_.erase(entity.value);
     return foundation::okStatus();
 }
 
 bool World::alive(Entity entity) const {
-    return registry_.valid(detail::toNative(entity));
+    return aliveEntities_.contains(entity.value);
 }
 
 std::size_t World::entityCount() const {
-    return registry_.storage<entt::entity>()->free_list();
+    return aliveEntities_.size();
 }
 
 std::vector<Entity> World::entities() const {
     std::vector<Entity> alive;
     alive.reserve(entityCount());
-    for (const entt::entity native : registry_.view<entt::entity>()) {
-        alive.push_back(detail::fromNative(native));
+    for (const std::uint32_t id : aliveEntities_) {
+        alive.push_back(Entity{id});
     }
     std::sort(alive.begin(), alive.end());
     return alive;
 }
 
 void World::clear() {
-    registry_.clear();
+    aliveEntities_.clear();
+    componentStores_.clear();
 }
 
 }

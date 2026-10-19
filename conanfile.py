@@ -10,7 +10,6 @@ class RTypeEngineConan(ConanFile):
     default_options = {"sfml": False}
 
     def requirements(self):
-        self.requires("entt/3.13.2")
         self.requires("asio/1.32.0")
         if self.options.sfml:
             self.requires("sfml/3.0.2")

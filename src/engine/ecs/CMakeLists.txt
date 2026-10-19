@@ -1,7 +1,5 @@
-find_package(EnTT CONFIG REQUIRED)
-
 add_library(engine_ecs STATIC world.cpp)
 add_library(rtype::engine_ecs ALIAS engine_ecs)
 target_include_directories(engine_ecs PUBLIC ${RTYPE_INCLUDE_DIRS})
 target_compile_features(engine_ecs PUBLIC cxx_std_20)
-target_link_libraries(engine_ecs PUBLIC rtype::engine_foundation EnTT::EnTT PRIVATE rtype::hardening)
+target_link_libraries(engine_ecs PUBLIC rtype::engine_foundation PRIVATE rtype::hardening)

@@ -1,10 +1,13 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <typeindex>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
-
-#include <entt/entity/registry.hpp>
 
 #include "engine/ecs/entity.hpp"
 #include "engine/foundation/noncopyable.hpp"
@@ -43,7 +46,27 @@ public:
     void each(Function&& function);
 
 private:
-    entt::registry registry_;
+    struct ComponentStorageBase {
+        virtual ~ComponentStorageBase();
+        virtual void erase(std::uint32_t entity) = 0;
+        [[nodiscard]] virtual bool contains(std::uint32_t entity) const = 0;
+    };
+
+    template <typename Component>
+    struct ComponentStorage;
+
+    template <typename Component>
+    [[nodiscard]] ComponentStorage<Component>& storage();
+
+    template <typename Component>
+    [[nodiscard]] ComponentStorage<Component>* findStorage();
+
+    template <typename Component>
+    [[nodiscard]] const ComponentStorage<Component>* findStorage() const;
+
+    std::unordered_set<std::uint32_t> aliveEntities_;
+    std::unordered_map<std::type_index, std::unique_ptr<ComponentStorageBase>> componentStores_;
+    std::uint64_t nextEntityId_ = 0;
 };
 
 }

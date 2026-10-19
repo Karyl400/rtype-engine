@@ -1,68 +1,102 @@
 #pragma once
 
-#include <string>
+#include <functional>
+#include <typeinfo>
 
 namespace engine::ecs {
 
-namespace detail {
+template <typename Component>
+struct World::ComponentStorage final : ComponentStorageBase {
+    std::unordered_map<std::uint32_t, Component> components;
 
-[[nodiscard]] entt::entity toNative(Entity entity);
-[[nodiscard]] Entity fromNative(entt::entity native);
+    void erase(std::uint32_t entity) override {
+        components.erase(entity);
+    }
 
+    [[nodiscard]] bool contains(std::uint32_t entity) const override {
+        return components.contains(entity);
+    }
+};
+
+template <typename Component>
+typename World::template ComponentStorage<Component>& World::storage() {
+    const std::type_index type(typeid(Component));
+    auto found = componentStores_.find(type);
+    if (found == componentStores_.end()) {
+        auto created = std::make_unique<ComponentStorage<Component>>();
+        auto* result = created.get();
+        componentStores_.emplace(type, std::move(created));
+        return *result;
+    }
+    return *static_cast<ComponentStorage<Component>*>(found->second.get());
+}
+
+template <typename Component>
+typename World::template ComponentStorage<Component>* World::findStorage() {
+    const auto found = componentStores_.find(std::type_index(typeid(Component)));
+    if (found == componentStores_.end()) return nullptr;
+    return static_cast<ComponentStorage<Component>*>(found->second.get());
+}
+
+template <typename Component>
+const typename World::template ComponentStorage<Component>* World::findStorage() const {
+    const auto found = componentStores_.find(std::type_index(typeid(Component)));
+    if (found == componentStores_.end()) return nullptr;
+    return static_cast<const ComponentStorage<Component>*>(found->second.get());
 }
 
 template <typename Component, typename... Args>
 foundation::Status World::add(Entity entity, Args&&... args) {
-    const auto native = detail::toNative(entity);
-    if (!registry_.valid(native)) {
+    if (!alive(entity)) {
         return foundation::failStatus(foundation::ErrorCode::NotFound, "entite inconnue");
     }
-    if (registry_.all_of<Component>(native)) {
+    auto& components = storage<Component>().components;
+    if (components.contains(entity.value)) {
         return foundation::failStatus(foundation::ErrorCode::InvalidArgument, "composant deja present");
     }
-    registry_.emplace<Component>(native, std::forward<Args>(args)...);
+    components.try_emplace(entity.value, std::forward<Args>(args)...);
     return foundation::okStatus();
 }
 
 template <typename Component>
 foundation::Status World::remove(Entity entity) {
-    const auto native = detail::toNative(entity);
-    if (!registry_.valid(native) || !registry_.all_of<Component>(native)) {
+    auto* store = findStorage<Component>();
+    if (!alive(entity) || store == nullptr || !store->contains(entity.value)) {
         return foundation::failStatus(foundation::ErrorCode::NotFound, "composant absent");
     }
-    registry_.remove<Component>(native);
+    store->erase(entity.value);
     return foundation::okStatus();
 }
 
 template <typename Component>
 bool World::has(Entity entity) const {
-    const auto native = detail::toNative(entity);
-    return registry_.valid(native) && registry_.all_of<Component>(native);
+    const auto* store = findStorage<Component>();
+    return alive(entity) && store != nullptr && store->contains(entity.value);
 }
 
 template <typename Component>
 Component* World::get(Entity entity) {
-    const auto native = detail::toNative(entity);
-    if (!registry_.valid(native)) {
-        return nullptr;
-    }
-    return registry_.try_get<Component>(native);
+    auto* store = findStorage<Component>();
+    if (!alive(entity) || store == nullptr) return nullptr;
+    const auto found = store->components.find(entity.value);
+    return found == store->components.end() ? nullptr : &found->second;
 }
 
 template <typename Component>
 const Component* World::get(Entity entity) const {
-    const auto native = detail::toNative(entity);
-    if (!registry_.valid(native)) {
-        return nullptr;
-    }
-    return registry_.try_get<Component>(native);
+    const auto* store = findStorage<Component>();
+    if (!alive(entity) || store == nullptr) return nullptr;
+    const auto found = store->components.find(entity.value);
+    return found == store->components.end() ? nullptr : &found->second;
 }
 
 template <typename... Components, typename Function>
 void World::each(Function&& function) {
-    auto view = registry_.view<Components...>();
-    for (const auto native : view) {
-        function(detail::fromNative(native), view.template get<Components>(native)...);
+    for (const std::uint32_t id : aliveEntities_) {
+        const Entity entity{id};
+        if ((has<Components>(entity) && ...)) {
+            std::invoke(function, entity, *get<Components>(entity)...);
+        }
     }
 }
 
