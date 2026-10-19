@@ -1,0 +1,5 @@
+add_library(engine_events STATIC event_bus.cpp)
+add_library(rtype::engine_events ALIAS engine_events)
+target_include_directories(engine_events PUBLIC ${RTYPE_INCLUDE_DIRS})
+target_compile_features(engine_events PUBLIC cxx_std_20)
+target_link_libraries(engine_events PUBLIC rtype::engine_foundation PRIVATE rtype::hardening)

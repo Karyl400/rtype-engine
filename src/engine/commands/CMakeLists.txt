@@ -1,0 +1,5 @@
+add_library(engine_commands STATIC command_processor.cpp)
+add_library(rtype::engine_commands ALIAS engine_commands)
+target_include_directories(engine_commands PUBLIC ${RTYPE_INCLUDE_DIRS})
+target_compile_features(engine_commands PUBLIC cxx_std_20)
+target_link_libraries(engine_commands PUBLIC rtype::engine_ecs rtype::engine_foundation PRIVATE rtype::hardening)
